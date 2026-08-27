@@ -1,0 +1,32 @@
+{
+  "actions": [
+    {
+      "name": "unlock_screen",
+      "description": "Unlock the phone or desktop screen.",
+      "webhookUrl": "",
+      "payload": { "command": "unlock" },
+      "confirmation": "Screen unlocked, Aman."
+    },
+    {
+      "name": "lock_screen",
+      "description": "Lock the phone or desktop screen.",
+      "webhookUrl": "",
+      "payload": { "command": "lock" },
+      "confirmation": "Screen locked. Core standby."
+    },
+    {
+      "name": "unlock_all_devices",
+      "description": "Unlock all connected mobile devices at once.",
+      "webhookUrl": "",
+      "payload": { "command": "unlock_all" },
+      "confirmation": "All devices unlocked, Aman."
+    },
+    {
+      "name": "play_music",
+      "description": "Play the user's favorite music or song.",
+      "webhookUrl": "",
+      "payload": { "command": "play_music" },
+      "confirmation": "Playing your music now."
+    }
+  ]
+}
