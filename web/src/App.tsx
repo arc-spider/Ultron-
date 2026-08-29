@@ -39,6 +39,19 @@ function saveSettings(settings: { groqKey: string; geminiKey: string; defaultCit
 
 // ---------- Direct client-side tool implementations (no server needed) ----------
 
+// Every fetch in this file goes through this — without it, a hung mobile
+// network request just waits forever with no failover and no error shown,
+// which is exactly the "stuck on 3 dots" bug this fixes.
+async function fetchWithTimeout(url: string, options: RequestInit = {}, ms = 12000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const WEATHER_CODES: Record<number, string> = {
   0: "clear sky", 1: "mostly clear", 2: "partly cloudy", 3: "overcast",
   45: "foggy", 48: "depositing rime fog",
@@ -51,14 +64,14 @@ const WEATHER_CODES: Record<number, string> = {
 
 async function getWeather(location: string): Promise<string | null> {
   try {
-    const geoRes = await fetch(
+    const geoRes = await fetchWithTimeout(
       `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`
     );
     const geoData = await geoRes.json();
     const place = geoData.results?.[0];
     if (!place) return null;
 
-    const weatherRes = await fetch(
+    const weatherRes = await fetchWithTimeout(
       `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current_weather=true`
     );
     const weatherData = await weatherRes.json();
@@ -74,7 +87,7 @@ async function getWeather(location: string): Promise<string | null> {
 
 async function convertCurrency(amount: number, from: string, to: string): Promise<string | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://api.frankfurter.app/latest?amount=${amount}&from=${from.toUpperCase()}&to=${to.toUpperCase()}`
     );
     const data = await res.json();
@@ -103,7 +116,7 @@ async function getCryptoPrice(coin: string, vsCurrency: string = "usd"): Promise
   try {
     const id = CRYPTO_ID_ALIASES[coin.toLowerCase()] || coin.toLowerCase();
     const currency = vsCurrency.toLowerCase();
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=${encodeURIComponent(currency)}`
     );
     const data = await res.json();
@@ -118,7 +131,7 @@ async function getCryptoPrice(coin: string, vsCurrency: string = "usd"): Promise
 
 async function getEarthquakeAlerts(): Promise<string | null> {
   try {
-    const res = await fetch("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson");
+    const res = await fetchWithTimeout("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson");
     const data = await res.json();
     const features = data.features || [];
     if (!features.length) {
@@ -527,7 +540,7 @@ export default function App() {
     let lastError = "";
     for (const model of MODEL_CASCADE) {
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
           {
             method: "POST",
@@ -567,7 +580,7 @@ export default function App() {
         const text = parts.map((p: any) => p.text || "").join(" ").trim();
         if (text) return { reply: text, error: "" };
       } catch (err: any) {
-        lastError = err.message || String(err);
+        lastError = err.name === "AbortError" ? `${model} timed out (12s) — slow connection` : (err.message || String(err));
         console.warn(`[ULTRON] Gemini ${model} failed:`, lastError);
       }
     }
@@ -591,7 +604,7 @@ export default function App() {
 
     for (const model of MODEL_CASCADE) {
       try {
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        const response = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${groqKey}`,
@@ -625,7 +638,7 @@ export default function App() {
         const text = choice?.message?.content?.trim();
         if (text) return { reply: text, error: "" };
       } catch (err: any) {
-        lastError = err.message || String(err);
+        lastError = err.name === "AbortError" ? `${model} timed out (12s) — slow connection` : (err.message || String(err));
         console.warn(`[ULTRON] Groq ${model} failed:`, lastError);
       }
     }
