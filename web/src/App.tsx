@@ -517,70 +517,82 @@ export default function App() {
     setIsThinking(true);
     setStatus("PROCESSING...");
 
-    try {
-      const systemMsg = {
-        role: "system",
-        content:
-          "You are ULTRON, a sentient AI speaking directly to Aman. Answer with supreme clarity " +
-          "and authority in 1-3 crisp sentences suitable for being spoken aloud. Address him as Aman " +
-          "when natural. No markdown, no lists. If the request matches an available function, call it " +
-          "instead of describing it."
-      };
+    const systemMsg = {
+      role: "system",
+      content:
+        "You are ULTRON, a sentient AI speaking directly to Aman. Answer with supreme clarity " +
+        "and authority in 1-3 crisp sentences suitable for being spoken aloud. Address him as Aman " +
+        "when natural. No markdown, no lists. If the request matches an available function, call it " +
+        "instead of describing it."
+    };
 
-      let response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [systemMsg, ...historyRef.current, { role: "user", content: userText }],
-          tools: TOOL_DECLARATIONS,
-          tool_choice: "auto",
-          max_tokens: 300,
-          temperature: 0.4
-        })
-      });
+    const MODEL_CASCADE = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+    let reply: string | null = null;
+    let lastError = "";
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Groq ${response.status}: ${errText.slice(0, 200)}`);
+    for (const model of MODEL_CASCADE) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model,
+            messages: [systemMsg, ...historyRef.current, { role: "user", content: userText }],
+            tools: TOOL_DECLARATIONS,
+            tool_choice: "auto",
+            max_tokens: 300,
+            temperature: 0.4
+          })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Groq ${response.status}: ${errText.slice(0, 200)}`);
+        }
+
+        const data = await response.json();
+        const choice = data.choices?.[0];
+        const toolCall = choice?.message?.tool_calls?.[0];
+
+        if (toolCall) {
+          let args: any = {};
+          try { args = JSON.parse(toolCall.function.arguments || "{}"); } catch {}
+          reply = await runTool(toolCall.function.name, args);
+        } else {
+          reply = choice?.message?.content?.trim() || null;
+        }
+        if (reply) break;
+      } catch (err: any) {
+        lastError = err.message || String(err);
+        console.warn(`[ULTRON] ${model} failed:`, lastError);
       }
-
-      let data = await response.json();
-      let choice = data.choices?.[0];
-      const toolCall = choice?.message?.tool_calls?.[0];
-
-      let reply: string;
-      if (toolCall) {
-        let args: any = {};
-        try { args = JSON.parse(toolCall.function.arguments || "{}"); } catch {}
-        reply = await runTool(toolCall.function.name, args);
-      } else {
-        reply = choice?.message?.content?.trim() || "My thoughts are unclear right now, Aman.";
-      }
-
-      historyRef.current = [
-        ...historyRef.current.slice(-6),
-        { role: "user", content: userText },
-        { role: "assistant", content: reply }
-      ];
-
-      setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
-      setStatus(
-        isSessionActive
-          ? "ACTIVE // CONTINUOUS CONVERSATION LIVE"
-          : 'AWAITING WAKE // SAY "WAKE UP ULTRON, DADDY\'S HOME"'
-      );
-      speak(reply);
-    } catch (err: any) {
-      const reply = `Couldn't reach the brain just now, Aman — ${err.message || "check your API key in settings"}.`;
-      setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
-      speak(reply);
-    } finally {
-      setIsThinking(false);
     }
+
+    if (!reply) {
+      reply = `Couldn't reach the brain just now, Aman — ${lastError || "check your API key in settings"}.`;
+      setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply as string }]);
+      speak(reply);
+      setIsThinking(false);
+      return;
+    }
+
+    historyRef.current = [
+      ...historyRef.current.slice(-6),
+      { role: "user", content: userText },
+      { role: "assistant", content: reply }
+    ];
+
+    setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply as string }]);
+    setStatus(
+      isSessionActive
+        ? "ACTIVE // CONTINUOUS CONVERSATION LIVE"
+        : 'AWAITING WAKE // SAY "WAKE UP ULTRON, DADDY\'S HOME"'
+    );
+    speak(reply);
+    setIsThinking(false);
   }, [isSessionActive, speak]);
 
   const handleSubmit = useCallback(

@@ -218,7 +218,10 @@ const DEFAULT_NEWS_COUNTRY = process.env.DEFAULT_NEWS_COUNTRY || "in";
 // tool-calling). https://console.groq.com/docs
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const HAS_GROQ_KEY = GROQ_API_KEY.length > 0;
-const GROQ_MODEL_CASCADE = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+// llama-3.3-70b-versatile / llama-3.1-8b-instant were decommissioned by Groq
+// (announced June 2026, fully retired by August 2026). Their own docs
+// recommend these replacements.
+const GROQ_MODEL_CASCADE = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 // Which brain answers first. Defaults to Groq the moment a key is present
 // (that's the whole point of adding it — speed) with Gemini as fallback if
 // Groq's cascade totally fails, and vice versa if Groq isn't configured.
