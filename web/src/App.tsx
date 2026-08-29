@@ -21,14 +21,15 @@ function normalize(s: string): string {
 function loadSettings() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { groqKey: "", defaultCity: "Kanpur" };
-    return { groqKey: "", defaultCity: "Kanpur", ...JSON.parse(raw) };
+    const defaults = { groqKey: "", geminiKey: "", defaultCity: "Kanpur" };
+    if (!raw) return defaults;
+    return { ...defaults, ...JSON.parse(raw) };
   } catch {
-    return { groqKey: "", defaultCity: "Kanpur" };
+    return { groqKey: "", geminiKey: "", defaultCity: "Kanpur" };
   }
 }
 
-function saveSettings(settings: { groqKey: string; defaultCity: string }) {
+function saveSettings(settings: { groqKey: string; geminiKey: string; defaultCity: string }) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {
@@ -187,6 +188,14 @@ const TOOL_DECLARATIONS = [
   }
 ];
 
+// Same 4 tools, reshaped for Gemini's functionDeclarations format
+// (Gemini doesn't use the OpenAI type:"function" wrapper).
+const GEMINI_FUNCTION_DECLARATIONS = TOOL_DECLARATIONS.map((t) => ({
+  name: t.function.name,
+  description: t.function.description,
+  parameters: t.function.parameters
+}));
+
 type Msg = { role: "aman" | "ultron"; text: string };
 
 export default function App() {
@@ -194,8 +203,9 @@ export default function App() {
   const sceneStateRef = useRef({ intensity: 0, active: false, unlocked: false });
 
   const [settings, setSettings] = useState(loadSettings());
-  const [showSettings, setShowSettings] = useState(!loadSettings().groqKey);
+  const [showSettings, setShowSettings] = useState(!loadSettings().groqKey && !loadSettings().geminiKey);
   const [draftKey, setDraftKey] = useState(settings.groqKey);
+  const [draftGeminiKey, setDraftGeminiKey] = useState(settings.geminiKey);
   const [draftCity, setDraftCity] = useState(settings.defaultCity);
   const [justSaved, setJustSaved] = useState(false);
 
@@ -504,19 +514,70 @@ export default function App() {
     return "That function isn't wired up.";
   };
 
-  const callBrain = useCallback(async (userText: string) => {
-    const key = settingsRef.current.groqKey;
-    if (!key) {
-      setShowSettings(true);
-      const reply = "I need your Groq API key first, Aman. Open settings to add it.";
-      setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
-      speak(reply);
-      return;
+  const callGeminiOnce = async (
+    userText: string,
+    geminiKey: string
+  ): Promise<{ reply: string | null; error: string }> => {
+    const MODEL_CASCADE = ["gemini-flash-latest", "gemini-3.6-flash"];
+    const geminiHistory = historyRef.current.map((h) => ({
+      role: h.role === "assistant" ? "model" : "user",
+      parts: [{ text: h.content }]
+    }));
+
+    let lastError = "";
+    for (const model of MODEL_CASCADE) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [...geminiHistory, { role: "user", parts: [{ text: userText }] }],
+              systemInstruction: {
+                parts: [{
+                  text:
+                    "You are ULTRON, a sentient AI speaking directly to Aman. Answer with supreme " +
+                    "clarity and authority in 1-3 crisp sentences suitable for being spoken aloud. " +
+                    "Address him as Aman when natural. No markdown, no lists. If the request matches " +
+                    "an available function, call it instead of describing it."
+                }]
+              },
+              tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
+              toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+              generationConfig: { maxOutputTokens: 300, temperature: 0.4 }
+            })
+          }
+        );
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Gemini ${res.status}: ${errText.slice(0, 200)}`);
+        }
+
+        const data = await res.json();
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        const functionCallPart = parts.find((p: any) => p.functionCall);
+
+        if (functionCallPart) {
+          const reply = await runTool(functionCallPart.functionCall.name, functionCallPart.functionCall.args || {});
+          return { reply, error: "" };
+        }
+
+        const text = parts.map((p: any) => p.text || "").join(" ").trim();
+        if (text) return { reply: text, error: "" };
+      } catch (err: any) {
+        lastError = err.message || String(err);
+        console.warn(`[ULTRON] Gemini ${model} failed:`, lastError);
+      }
     }
+    return { reply: null, error: lastError };
+  };
 
-    setIsThinking(true);
-    setStatus("PROCESSING...");
-
+  const callGroqOnce = async (
+    userText: string,
+    groqKey: string
+  ): Promise<{ reply: string | null; error: string }> => {
     const systemMsg = {
       role: "system",
       content:
@@ -525,9 +586,7 @@ export default function App() {
         "when natural. No markdown, no lists. If the request matches an available function, call it " +
         "instead of describing it."
     };
-
     const MODEL_CASCADE = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
-    let reply: string | null = null;
     let lastError = "";
 
     for (const model of MODEL_CASCADE) {
@@ -535,7 +594,7 @@ export default function App() {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${key}`,
+            Authorization: `Bearer ${groqKey}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
@@ -560,19 +619,50 @@ export default function App() {
         if (toolCall) {
           let args: any = {};
           try { args = JSON.parse(toolCall.function.arguments || "{}"); } catch {}
-          reply = await runTool(toolCall.function.name, args);
-        } else {
-          reply = choice?.message?.content?.trim() || null;
+          const reply = await runTool(toolCall.function.name, args);
+          return { reply, error: "" };
         }
-        if (reply) break;
+        const text = choice?.message?.content?.trim();
+        if (text) return { reply: text, error: "" };
       } catch (err: any) {
         lastError = err.message || String(err);
-        console.warn(`[ULTRON] ${model} failed:`, lastError);
+        console.warn(`[ULTRON] Groq ${model} failed:`, lastError);
       }
+    }
+    return { reply: null, error: lastError };
+  };
+
+  const callBrain = useCallback(async (userText: string) => {
+    const { groqKey, geminiKey } = settingsRef.current;
+    if (!groqKey && !geminiKey) {
+      setShowSettings(true);
+      const reply = "I need a Groq or Gemini API key first, Aman. Open settings to add one.";
+      setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
+      speak(reply);
+      return;
+    }
+
+    setIsThinking(true);
+    setStatus("PROCESSING...");
+
+    // Gemini tried first when both are set — it's the higher-quality brain;
+    // Groq is the fast fallback if Gemini's cascade fails entirely.
+    let reply: string | null = null;
+    let lastError = "";
+
+    if (geminiKey) {
+      const result = await callGeminiOnce(userText, geminiKey);
+      reply = result.reply;
+      lastError = result.error;
+    }
+    if (!reply && groqKey) {
+      const result = await callGroqOnce(userText, groqKey);
+      reply = result.reply;
+      lastError = result.error || lastError;
     }
 
     if (!reply) {
-      reply = `Couldn't reach the brain just now, Aman — ${lastError || "check your API key in settings"}.`;
+      reply = `Couldn't reach the brain just now, Aman — ${lastError || "check your API keys in settings"}.`;
       setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply as string }]);
       speak(reply);
       setIsThinking(false);
@@ -648,12 +738,16 @@ export default function App() {
   };
 
   const handleSaveSettings = () => {
-    const next = { groqKey: draftKey.trim(), defaultCity: draftCity.trim() || "Kanpur" };
+    const next = {
+      groqKey: draftKey.trim(),
+      geminiKey: draftGeminiKey.trim(),
+      defaultCity: draftCity.trim() || "Kanpur"
+    };
     setSettings(next);
     saveSettings(next);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
-    if (next.groqKey) {
+    if (next.groqKey || next.geminiKey) {
       setTimeout(() => setShowSettings(false), 600);
     }
   };
@@ -746,13 +840,26 @@ export default function App() {
       </div>
 
       {showSettings && (
-        <div className="modal-backdrop" onClick={() => settings.groqKey && setShowSettings(false)}>
+        <div className="modal-backdrop" onClick={() => (settings.groqKey || settings.geminiKey) && setShowSettings(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">Ultron Settings</div>
             <div className="modal-desc">
-              Your key is stored only in this browser's local storage. It's never sent anywhere
-              except directly to Groq, and never committed to the GitHub repo. You'll only need to
-              enter it once on this device.
+              Keys are stored only in this browser's local storage. Never sent anywhere except
+              directly to the provider they belong to, never committed to the GitHub repo. Enter
+              once, saved on this device from then on. If both are set, Gemini answers first
+              (higher quality); Groq is the fast fallback if Gemini's cascade fails.
+            </div>
+
+            <div className="field-group">
+              <label className="field-label">Gemini API Key</label>
+              <input
+                type="password"
+                className="field-input"
+                value={draftGeminiKey}
+                onChange={(e) => setDraftGeminiKey(e.target.value)}
+                placeholder="AIzaSy... or AQ...."
+              />
+              <div className="field-hint">Get one free, no card, at aistudio.google.com/apikey</div>
             </div>
 
             <div className="field-group">
@@ -783,7 +890,7 @@ export default function App() {
                 Save{justSaved ? "d" : ""}
                 {justSaved && <span className="saved-badge">✓</span>}
               </button>
-              {settings.groqKey && (
+              {(settings.groqKey || settings.geminiKey) && (
                 <button className="btn-secondary" onClick={() => setShowSettings(false)}>
                   <X size={14} />
                 </button>
