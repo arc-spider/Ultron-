@@ -244,6 +244,8 @@ export default function App() {
   settingsRef.current = settings;
 
   // ---------- THREE.JS HOLOGRAM ----------
+  // ---------- HOLOGRAM: fractal lightning-branch burst inside a segmented
+  // ring frame, matching the reference screenshot's look directly ----------
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
@@ -252,71 +254,95 @@ export default function App() {
     const height = mount.clientHeight;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(58, width / height, 0.1, 100);
-    camera.position.z = 4.6;
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+    camera.position.z = 5.4;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     mount.appendChild(renderer.domElement);
 
-    const GOLD = 0xf5a623;
+    const FILAMENT_COLOR = 0xf0994d; // warm copper-amber, matches the reference
+    const RING_COLOR = 0xc2761f; // slightly darker copper for the frame
 
-    const coreGeo = new THREE.IcosahedronGeometry(0.72, 3);
-    const coreMat = new THREE.MeshBasicMaterial({ color: GOLD });
-    const core = new THREE.Mesh(coreGeo, coreMat);
-    scene.add(core);
+    const holoGroup = new THREE.Group();
+    scene.add(holoGroup);
 
-    const latticeGeo = new THREE.IcosahedronGeometry(1.05, 1);
-    const latticeMat = new THREE.MeshBasicMaterial({
-      color: GOLD, wireframe: true, transparent: true, opacity: 0.35
-    });
-    const lattice = new THREE.Mesh(latticeGeo, latticeMat);
-    scene.add(lattice);
-
-    const RING_COUNT = 26;
-    const rings: { mesh: THREE.Mesh; spinAxis: number; spinSpeed: number; phase: number; rotBase: THREE.Euler }[] = [];
-    for (let i = 0; i < RING_COUNT; i++) {
-      const radius = 1.4 + Math.random() * 1.0;
-      const tube = 0.004 + Math.random() * 0.006;
-      const geo = new THREE.TorusGeometry(radius, tube, 6, 72);
-      const mat = new THREE.MeshBasicMaterial({
-        color: GOLD, transparent: true, opacity: 0.3,
-        blending: THREE.AdditiveBlending, depthWrite: false
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.rotation.set(
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2
-      );
-      scene.add(mesh);
-      rings.push({
-        mesh,
-        spinAxis: Math.floor(Math.random() * 3),
-        spinSpeed: (Math.random() - 0.5) * 0.5,
-        phase: Math.random() * Math.PI * 2,
-        rotBase: mesh.rotation.clone()
-      });
+    // --- Fractal branch burst (Lichtenberg-figure style) ---
+    function buildBranch(
+      points: THREE.Vector3[],
+      startRadius: number,
+      endRadius: number,
+      angle: number,
+      depth: number
+    ) {
+      const segments = 7 + Math.floor(Math.random() * 5);
+      let r = startRadius;
+      let a = angle;
+      let prev = new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, (Math.random() - 0.5) * 0.1);
+      for (let s = 0; s < segments; s++) {
+        r += (endRadius - startRadius) / segments;
+        a += (Math.random() - 0.5) * 0.4;
+        const z = (Math.random() - 0.5) * 0.18 * (r / endRadius);
+        const next = new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, z);
+        points.push(prev, next);
+        if (depth < 2 && s > 2 && Math.random() < 0.32) {
+          buildBranch(points, r, r + (endRadius - startRadius) * (0.3 + Math.random() * 0.3), a + (Math.random() - 0.5) * 1.4, depth + 1);
+        }
+        prev = next;
+      }
     }
 
-    const particleCount = 260;
-    const positions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-      const r = 2.1 + Math.random() * 1.4;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      positions[i * 3 + 2] = r * Math.cos(phi);
+    const branchPoints: THREE.Vector3[] = [];
+    const MAIN_BRANCHES = 40;
+    for (let i = 0; i < MAIN_BRANCHES; i++) {
+      const baseAngle = (i / MAIN_BRANCHES) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+      buildBranch(branchPoints, 0.28, 1.5 + Math.random() * 0.25, baseAngle, 0);
     }
-    const particleGeo = new THREE.BufferGeometry();
-    particleGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const particleMat = new THREE.PointsMaterial({
-      color: GOLD, size: 0.028, transparent: true, opacity: 0.55
+    const filamentGeo = new THREE.BufferGeometry().setFromPoints(branchPoints);
+    const filamentMat = new THREE.LineBasicMaterial({
+      color: FILAMENT_COLOR, transparent: true, opacity: 0.85,
+      blending: THREE.AdditiveBlending, depthWrite: false
     });
-    const particles = new THREE.Points(particleGeo, particleMat);
-    scene.add(particles);
+    const filaments = new THREE.LineSegments(filamentGeo, filamentMat);
+    holoGroup.add(filaments);
+
+    // --- Dark void at the very center ---
+    const voidGeo = new THREE.CircleGeometry(0.22, 32);
+    const voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const voidCircle = new THREE.Mesh(voidGeo, voidMat);
+    voidCircle.position.z = 0.02;
+    holoGroup.add(voidCircle);
+
+    // --- Two offset thick outer rings (the frame) ---
+    const ring1Geo = new THREE.TorusGeometry(1.75, 0.05, 8, 100);
+    const ring1Mat = new THREE.MeshBasicMaterial({ color: RING_COLOR, transparent: true, opacity: 0.85 });
+    const ring1 = new THREE.Mesh(ring1Geo, ring1Mat);
+    holoGroup.add(ring1);
+
+    const ring2Geo = new THREE.TorusGeometry(1.85, 0.035, 8, 100);
+    const ring2Mat = new THREE.MeshBasicMaterial({ color: RING_COLOR, transparent: true, opacity: 0.55 });
+    const ring2 = new THREE.Mesh(ring2Geo, ring2Mat);
+    ring2.rotation.x = 0.25;
+    ring2.rotation.y = 0.1;
+    ring2.position.x = -0.06;
+    holoGroup.add(ring2);
+
+    // Segmented tick marks around the main ring — the dashed/mechanical
+    // texture visible in the reference image
+    const tickGroup = new THREE.Group();
+    const TICK_COUNT = 48;
+    for (let i = 0; i < TICK_COUNT; i++) {
+      if (Math.random() < 0.25) continue; // gaps, so it reads as broken/segmented, not solid
+      const a = (i / TICK_COUNT) * Math.PI * 2;
+      const tickGeo = new THREE.BoxGeometry(0.04, 0.09, 0.02);
+      const tickMat = new THREE.MeshBasicMaterial({ color: FILAMENT_COLOR, transparent: true, opacity: 0.7 });
+      const tick = new THREE.Mesh(tickGeo, tickMat);
+      tick.position.set(Math.cos(a) * 1.75, Math.sin(a) * 1.75, 0);
+      tick.rotation.z = a;
+      tickGroup.add(tick);
+    }
+    holoGroup.add(tickGroup);
 
     const clock = new THREE.Clock();
     let animId: number;
@@ -326,33 +352,21 @@ export default function App() {
       const t = clock.getElapsedTime();
       const st = sceneStateRef.current;
 
-      core.rotation.y = t * 0.15;
-      core.rotation.x = t * 0.07;
-      const pulse = 1 + Math.sin(t * 2) * 0.03 + st.intensity * 0.4;
-      core.scale.setScalar(pulse);
-      (core.material as THREE.MeshBasicMaterial).color.setHex(st.unlocked ? 0xfbbf24 : GOLD);
+      holoGroup.rotation.z = t * 0.06;
+      holoGroup.rotation.y = Math.sin(t * 0.15) * 0.08;
 
-      lattice.rotation.y = -t * 0.09;
-      lattice.rotation.x = t * 0.05;
+      const pulse = 1 + Math.sin(t * 2) * 0.02 + st.intensity * 0.15;
+      holoGroup.scale.setScalar(pulse);
 
-      rings.forEach((r) => {
-        const spin = t * r.spinSpeed * (st.unlocked ? 1.5 : 0.8);
-        const rot = r.rotBase.clone();
-        if (r.spinAxis === 0) rot.x += spin;
-        else if (r.spinAxis === 1) rot.y += spin;
-        else rot.z += spin;
-        r.mesh.rotation.copy(rot);
+      const shimmer = 0.75 + 0.25 * Math.sin(t * 3);
+      const reactive = st.active ? st.intensity * 0.5 : 0;
+      filamentMat.opacity = Math.min(1, 0.7 * shimmer + reactive);
+      filamentMat.color.setHex(st.unlocked ? 0xfbbf24 : FILAMENT_COLOR);
 
-        const shimmer = 0.5 + 0.5 * Math.sin(t * 2.2 + r.phase);
-        const reactive = st.active ? st.intensity * 1.3 : 0;
-        const baseOpacity = st.unlocked ? 0.5 : 0.28;
-        (r.mesh.material as THREE.MeshBasicMaterial).opacity = Math.min(
-          1,
-          Math.max(0.04, baseOpacity * shimmer + reactive * 0.55)
-        );
-      });
+      ring1.rotation.z = -t * 0.03;
+      ring2.rotation.z = t * 0.04;
+      tickGroup.rotation.z = -t * 0.03;
 
-      particles.rotation.y = t * 0.02;
       renderer.render(scene, camera);
     }
     animate();
@@ -370,15 +384,17 @@ export default function App() {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", handleResize);
       renderer.dispose();
-      coreGeo.dispose();
-      coreMat.dispose();
-      latticeGeo.dispose();
-      latticeMat.dispose();
-      particleGeo.dispose();
-      particleMat.dispose();
-      rings.forEach((r) => {
-        r.mesh.geometry.dispose();
-        (r.mesh.material as THREE.Material).dispose();
+      filamentGeo.dispose();
+      filamentMat.dispose();
+      voidGeo.dispose();
+      voidMat.dispose();
+      ring1Geo.dispose();
+      ring1Mat.dispose();
+      ring2Geo.dispose();
+      ring2Mat.dispose();
+      tickGroup.children.forEach((c) => {
+        (c as THREE.Mesh).geometry.dispose();
+        ((c as THREE.Mesh).material as THREE.Material).dispose();
       });
       if (mount.contains(renderer.domElement)) {
         mount.removeChild(renderer.domElement);
