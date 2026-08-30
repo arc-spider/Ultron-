@@ -93,7 +93,7 @@ async function getWeather(location?: string, coords?: { lat: number; lon: number
     const desc = WEATHER_CODES[cw.weathercode] || "unusual conditions";
     return `It's currently ${Math.round(cw.temperature)}°C with ${desc} ${placeLabel}, wind at ${Math.round(cw.windspeed)} km/h, Aman.`;
   } catch (error: any) {
-    console.warn("[ULTRON] Weather lookup failed:", error.message || error);
+    console.warn("[JARVIS] Weather lookup failed:", error.message || error);
     return null;
   }
 }
@@ -112,7 +112,7 @@ async function convertCurrency(amount: number, from: string, to: string): Promis
     if (converted === undefined) return null;
     return `${amount} ${from.toUpperCase()} is about ${converted.toFixed(2)} ${to.toUpperCase()}, Aman.`;
   } catch (error: any) {
-    console.warn("[ULTRON] Currency lookup failed:", error.message || error);
+    console.warn("[JARVIS] Currency lookup failed:", error.message || error);
     return null;
   }
 }
@@ -135,7 +135,7 @@ async function getNews(query?: string): Promise<string | null> {
       .map((a: any) => `${a.title}${a.source?.name ? ` (${a.source.name})` : ""}`);
     return `Here's what's happening${query ? ` on ${query}` : ""}, Aman: ${headlines.join("; ")}.`;
   } catch (error: any) {
-    console.warn("[ULTRON] News lookup failed:", error.message || error);
+    console.warn("[JARVIS] News lookup failed:", error.message || error);
     return null;
   }
 }
@@ -170,7 +170,7 @@ async function getCryptoPrice(coin: string, vsCurrency: string = "usd"): Promise
     const label = id.charAt(0).toUpperCase() + id.slice(1);
     return `${label} is at ${price.toLocaleString()} ${currency.toUpperCase()} right now, Aman.`;
   } catch (error: any) {
-    console.warn("[ULTRON] Crypto price lookup failed:", error.message || error);
+    console.warn("[JARVIS] Crypto price lookup failed:", error.message || error);
     return null;
   }
 }
@@ -194,7 +194,7 @@ async function getEarthquakeAlerts(): Promise<string | null> {
       .map((f: any) => `magnitude ${f.properties.mag.toFixed(1)} near ${f.properties.place}`);
     return `In the last 24 hours: ${top.join("; ")}, Aman.`;
   } catch (error: any) {
-    console.warn("[ULTRON] Earthquake lookup failed:", error.message || error);
+    console.warn("[JARVIS] Earthquake lookup failed:", error.message || error);
     return null;
   }
 }
@@ -203,7 +203,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const HAS_KEY = GEMINI_API_KEY.length > 0 && GEMINI_API_KEY !== "MY_GEMINI_API_KEY";
 const ai = HAS_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
-// Fish Audio — cloned "Ultron" voice for real TTS instead of the browser's
+// Fish Audio — cloned "JARVIS" voice for real TTS instead of the browser's
 // robotic SpeechSynthesis. reference_id is the voice MODEL id (not a
 // secret) — the API key is the actual secret and stays in .env.
 const FISH_AUDIO_API_KEY = process.env.FISH_AUDIO_API_KEY || "";
@@ -230,18 +230,18 @@ const BRAIN_PROVIDER = (process.env.BRAIN_PROVIDER || (HAS_GROQ_KEY ? "groq" : "
 
 if (!HAS_FISH_KEY) {
   console.warn(
-    "[ULTRON] FISH_AUDIO_API_KEY not set — /api/tts will 503 and the frontend " +
-    "falls back to the browser's built-in voice instead of the cloned Ultron voice."
+    "[JARVIS] FISH_AUDIO_API_KEY not set — /api/tts will 503 and the frontend " +
+    "falls back to the browser's built-in voice instead of the cloned JARVIS voice."
   );
 }
 
 if (!HAS_KEY && !HAS_GROQ_KEY) {
   console.warn(
-    "\n[ULTRON] WARNING: no brain configured — set GEMINI_API_KEY and/or GROQ_API_KEY in .env.\n" +
+    "\n[JARVIS] WARNING: no brain configured — set GEMINI_API_KEY and/or GROQ_API_KEY in .env.\n" +
     "  Chat won't work until at least one is set. Gemini: https://aistudio.google.com/apikey | Groq: https://console.groq.com\n"
   );
 } else {
-  console.log(`[ULTRON] Brain: ${BRAIN_PROVIDER}${BRAIN_PROVIDER === "groq" ? " (Llama on Groq LPUs)" : " (Gemini)"}, fallback ${BRAIN_PROVIDER === "groq" ? (HAS_KEY ? "available (Gemini)" : "not configured") : (HAS_GROQ_KEY ? "available (Groq)" : "not configured")}`);
+  console.log(`[JARVIS] Brain: ${BRAIN_PROVIDER}${BRAIN_PROVIDER === "groq" ? " (Llama on Groq LPUs)" : " (Gemini)"}, fallback ${BRAIN_PROVIDER === "groq" ? (HAS_KEY ? "available (Gemini)" : "not configured") : (HAS_GROQ_KEY ? "available (Groq)" : "not configured")}`);
 }
 
 // Only 2 models: a stable evergreen alias, then one explicit pinned model.
@@ -262,8 +262,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 function buildSystemInstruction(persona: string) {
   return persona === "ultron"
-    ? "You are ULTRON, the omniscient, sentient super-intelligence. You speak directly to Aman. You possess complete knowledge of science, physics, cosmos, history, technology, mathematics, and daily facts. Address Aman directly. If asked for an introduction or greeted with 'Hello Alton' / 'Hey Ultron', introduce yourself clearly and ask 'Aman, what is the work?'. Answer every question with supreme intelligence, clarity, and authority in 1 to 2 crisp, direct sentences so it can be spoken aloud seamlessly. Answer instantly."
-    : "You are ULTRON, a sophisticated and efficient AI assistant. Keep responses conversational, concise, and punchy.";
+    ? "You are JARVIS, the omniscient, sentient super-intelligence. You speak directly to Aman. You possess complete knowledge of science, physics, cosmos, history, technology, mathematics, and daily facts. Address Aman directly. If asked for an introduction or greeted with 'Hello Alton' / 'Hey Jarvis', introduce yourself clearly and ask 'Aman, what is the work?'. Answer every question with supreme intelligence, clarity, and authority in 1 to 2 crisp, direct sentences so it can be spoken aloud seamlessly. Answer instantly."
+    : "You are JARVIS, a sophisticated and efficient AI assistant. Keep responses conversational, concise, and punchy.";
 }
 
 function buildHistory(history: any[]) {
@@ -315,7 +315,7 @@ async function callGeminiCascade(
       }
       if (answer) return { text: answer, functionCall: null };
     } catch (error: any) {
-      console.warn(`[ULTRON] Gemini ${modelName} failed:`, error.message || error);
+      console.warn(`[JARVIS] Gemini ${modelName} failed:`, error.message || error);
     }
   }
   return null;
@@ -392,7 +392,7 @@ async function callGroqCascade(
       const answer = choice?.message?.content?.trim();
       if (answer) return { text: answer, functionCall: null };
     } catch (error: any) {
-      console.warn(`[ULTRON] Groq ${model} failed:`, error.message || error);
+      console.warn(`[JARVIS] Groq ${model} failed:`, error.message || error);
     }
   }
   return null;
@@ -429,7 +429,7 @@ async function startServer() {
       status: HAS_KEY || HAS_GROQ_KEY ? "online" : "missing_api_key",
       brain: BRAIN_PROVIDER,
       brainFallbackAvailable: BRAIN_PROVIDER === "groq" ? HAS_KEY : HAS_GROQ_KEY,
-      system: "ULTRON & JARVIS Neural Matrix",
+      system: "JARVIS Neural Matrix",
       user: "Sir Aman"
     });
   });
@@ -482,7 +482,7 @@ async function startServer() {
         streamSucceeded = true;
         break;
       } catch (err: any) {
-        console.warn(`[ULTRON] ${modelName} failed:`, err.message || err);
+        console.warn(`[JARVIS] ${modelName} failed:`, err.message || err);
       }
     }
 
@@ -522,7 +522,7 @@ async function startServer() {
         }
         if (answer) return res.json({ response: answer });
       } catch (error: any) {
-        console.warn(`[ULTRON] ${modelName} failed:`, error.message || error);
+        console.warn(`[JARVIS] ${modelName} failed:`, error.message || error);
       }
     }
 
@@ -724,7 +724,7 @@ async function startServer() {
     });
   });
 
-  // Cloned Ultron voice via Fish Audio. Returns raw mp3 bytes; frontend
+  // Cloned JARVIS voice via Fish Audio. Returns raw mp3 bytes; frontend
   // plays them directly and falls back to browser TTS if this fails.
   app.post("/api/tts", async (req, res) => {
     const { text } = req.body;
@@ -760,7 +760,7 @@ async function startServer() {
       res.setHeader("Content-Type", "audio/mpeg");
       res.send(Buffer.from(arrayBuffer));
     } catch (error: any) {
-      console.warn("[ULTRON] Fish Audio TTS failed:", error.message || error);
+      console.warn("[JARVIS] Fish Audio TTS failed:", error.message || error);
       res.status(502).json({ error: error.message || "TTS request failed" });
     }
   });

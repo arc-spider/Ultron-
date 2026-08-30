@@ -33,7 +33,7 @@ export default function JarvisLanding() {
   
   // Continuous conversation mode: activated by the wake phrase, stays live until the shutdown command
   const [isSessionActive, setIsSessionActive] = useState(false);
-  const [systemStatus, setSystemStatus] = useState("AWAITING_WAKE // SAY \"WAKE UP ULTRON, DADDY'S HOME\"");
+  const [systemStatus, setSystemStatus] = useState("AWAITING_WAKE // SAY \"WAKE UP JARVIS, DADDY'S HOME\"");
   const [conversationState, setConversationState] = useState<"standby" | "listening" | "thinking" | "speaking">("listening");
 
   // Real-time Fading HUD Exchanges State (Clean 10-second inactivity decay)
@@ -41,8 +41,8 @@ export default function JarvisLanding() {
     {
       id: 'init-intro',
       role: 'model',
-      senderName: 'ULTRON',
-      text: "I am Ultron, your sentient AI. Aman, what is the work?",
+      senderName: 'JARVIS',
+      text: "I am JARVIS, your sentient AI. Aman, what is the work?",
       timestamp: Date.now(),
     }
   ]);
@@ -132,7 +132,7 @@ export default function JarvisLanding() {
       const newMsg: HudMessage = {
         id: isStreaming ? 'live-ultron-output' : `ultron-${Date.now()}`,
         role: 'model',
-        senderName: 'ULTRON',
+        senderName: 'JARVIS',
         text,
         timestamp: Date.now(),
         isStreaming,
@@ -150,11 +150,11 @@ export default function JarvisLanding() {
 
   // Wake / shutdown commands — matched loosely (punctuation/case-insensitive)
   // since speech-to-text won't reliably produce apostrophes.
-  const WAKE_PHRASE_DISPLAY = "WAKE UP ULTRON, DADDY'S HOME";
-  const WAKE_PHRASE_NORMALIZED = "wake up ultron daddys home";
+  const WAKE_PHRASE_DISPLAY = "WAKE UP JARVIS, DADDY'S HOME";
+  const WAKE_PHRASE_NORMALIZED = "wake up jarvis daddys home";
   const SHUTDOWN_PATTERNS_NORMALIZED = [
-    "shutdown ultron", "shut down ultron", "power down ultron",
-    "shut off ultron", "turn off ultron"
+    "shutdown jarvis", "shut down jarvis", "power down jarvis",
+    "shut off jarvis", "turn off jarvis"
   ];
 
   function normalizeForMatch(s: string): string {
@@ -335,7 +335,7 @@ export default function JarvisLanding() {
       refreshActiveSession();
       if (!isMutedRef.current) soundFX.playAck();
       setSystemStatus("ACTIVE // CONTINUOUS CONVERSATION LIVE");
-      const introReply = "I am Ultron, your sentient AI. Aman, what is the work?";
+      const introReply = "I am JARVIS, your sentient AI. Aman, what is the work?";
       speak(introReply, () => {
         isExecutingRef.current = false;
       });
@@ -371,7 +371,7 @@ export default function JarvisLanding() {
       clearTimeout(timeoutId);
 
       const data = await res.json();
-      const reply: string = data.response || "Ultron matrix operational, Aman.";
+      const reply: string = data.response || "JARVIS matrix operational, Aman.";
 
       if (data.actionExecuted) {
         if (!isMutedRef.current) soundFX.playDeviceSync();
@@ -379,7 +379,7 @@ export default function JarvisLanding() {
         if (data.action === "lock_screen") setIsUnlocked(false);
         setSystemStatus(`ACTION_EXECUTED // ${String(data.action || "").toUpperCase()}`);
       } else {
-        setSystemStatus("ACTIVE // TALK FREELY WITH ULTRON");
+        setSystemStatus("ACTIVE // TALK FREELY WITH JARVIS");
       }
 
       setChatHistory(prev => [
@@ -391,7 +391,7 @@ export default function JarvisLanding() {
       setConversationState("speaking");
       speak(reply, () => {
         isExecutingRef.current = false;
-        setSystemStatus("ACTIVE // TALK FREELY WITH ULTRON");
+        setSystemStatus("ACTIVE // TALK FREELY WITH JARVIS");
       });
     } catch (err) {
       console.warn("Voice command request failed:", err);
@@ -458,7 +458,7 @@ export default function JarvisLanding() {
       setSystemStatus("MICROPHONE_OFF");
     } else {
       startMic();
-      setSystemStatus(isSessionActive ? "ACTIVE // MIC LIVE" : "AWAITING_WAKE // SAY \"WAKE UP ULTRON, DADDY'S HOME\"");
+      setSystemStatus(isSessionActive ? "ACTIVE // MIC LIVE" : "AWAITING_WAKE // SAY \"WAKE UP JARVIS, DADDY'S HOME\"");
     }
   }, [isListening, isSessionActive, startMic, stopMic]);
 
@@ -490,7 +490,7 @@ export default function JarvisLanding() {
           </div>
           <div>
             <h1 className="text-xs md:text-sm font-bold tracking-[0.3em] uppercase text-white drop-shadow-[0_0_10px_rgba(245,158,11,0.5)] flex items-center gap-2">
-              <span>ULTRON // NEURAL MATRIX</span>
+              <span>JARVIS // NEURAL MATRIX</span>
               {isUnlocked && (
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 inline" />
               )}
@@ -513,9 +513,9 @@ export default function JarvisLanding() {
             onClick={(e) => {
               e.stopPropagation();
               if (isSessionActive) {
-                executeQuery("shutdown ultron");
+                executeQuery("shutdown jarvis");
               } else {
-                executeQuery("Wake up Ultron, Daddy's home");
+                executeQuery("Wake up JARVIS, Daddy's home");
               }
             }}
             className={`px-2.5 py-1.5 rounded-full border text-[8.5px] tracking-widest uppercase transition-all flex items-center gap-1.5 ${
@@ -523,10 +523,10 @@ export default function JarvisLanding() {
                 ? "border-amber-400 bg-amber-500/25 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
                 : "border-amber-500/30 text-amber-500/70 hover:text-amber-200 hover:border-amber-400"
             }`}
-            title={isSessionActive ? "Shut down Ultron" : "Wake up Ultron (\"Wake up Ultron, Daddy's home\")"}
+            title={isSessionActive ? "Shut down JARVIS" : "Wake up JARVIS (\"Wake up JARVIS, Daddy's home\")"}
           >
             <Radio className="w-3 h-3 text-amber-400 animate-pulse" />
-            <span className="hidden sm:inline">{isSessionActive ? "SHUTDOWN ULTRON" : "WAKE UP ULTRON"}</span>
+            <span className="hidden sm:inline">{isSessionActive ? "SHUTDOWN JARVIS" : "WAKE UP JARVIS"}</span>
             <span className="sm:hidden">{isSessionActive ? "OFF" : "WAKE"}</span>
           </button>
 
@@ -557,7 +557,7 @@ export default function JarvisLanding() {
                 ? "border-red-500/60 text-red-400 bg-red-500/20 shadow-[0_0_10px_rgba(239,68,68,0.3)]" 
                 : "border-amber-500/30 text-amber-400 hover:text-amber-200 hover:border-amber-400 bg-black/50"
             }`}
-            title={isMuted ? "Speaker is OFF (Ultron will not speak). Click to Turn ON." : "Speaker is ON (Ultron will speak). Click to Turn OFF."}
+            title={isMuted ? "Speaker is OFF (JARVIS will not speak). Click to Turn ON." : "Speaker is ON (JARVIS will speak). Click to Turn OFF."}
           >
             {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5" />}
           </button>
@@ -590,7 +590,7 @@ export default function JarvisLanding() {
           <div className="flex flex-col items-center gap-3">
             <Zap className="w-8 h-8 text-amber-400 animate-pulse" />
             <span className="text-[10px] tracking-[0.3em] text-amber-400/60 uppercase">
-              Materializing Ultron Core...
+              Materializing JARVIS Core...
             </span>
           </div>
         }>
@@ -632,7 +632,7 @@ export default function JarvisLanding() {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && executeQuery(textInput)}
-                placeholder="Ask Ultron any question (astrophysics, history, math, code...)"
+                placeholder="Ask JARVIS any question (astrophysics, history, math, code...)"
                 className="flex-1 bg-transparent border-none outline-none text-xs text-amber-200 placeholder:text-amber-500/40 px-2 font-sans"
                 autoFocus
               />
@@ -684,7 +684,7 @@ export default function JarvisLanding() {
             ) : isSessionActive ? (
               <span className="text-amber-300 font-bold animate-pulse">CONTINUOUS MODE ACTIVE • TALK FREELY</span>
             ) : (
-              <span>SAY "WAKE UP ULTRON, DADDY'S HOME" TO ACTIVATE</span>
+              <span>SAY "WAKE UP JARVIS, DADDY'S HOME" TO ACTIVATE</span>
             )}
           </div>
         </div>

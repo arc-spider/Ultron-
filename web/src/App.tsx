@@ -2,10 +2,10 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import * as THREE from "three";
 import { Mic, MicOff, Volume2, VolumeX, Radio, Settings, X } from "lucide-react";
 
-const WAKE_NORMALIZED = "wake up ultron daddys home";
+const WAKE_NORMALIZED = "wake up jarvis daddys home";
 const SHUTDOWN_PATTERNS = [
-  "shutdown ultron", "shut down ultron", "power down ultron",
-  "shut off ultron", "turn off ultron"
+  "shutdown jarvis", "shut down jarvis", "power down jarvis",
+  "shut off jarvis", "turn off jarvis"
 ];
 const STORAGE_KEY = "ultron_settings_v1";
 
@@ -223,7 +223,7 @@ export default function App() {
   const [justSaved, setJustSaved] = useState(false);
 
   const [isSessionActive, setIsSessionActive] = useState(false);
-  const [status, setStatus] = useState('AWAITING WAKE // SAY "WAKE UP ULTRON, DADDY\'S HOME"');
+  const [status, setStatus] = useState('AWAITING WAKE // SAY "WAKE UP JARVIS, DADDY\'S HOME"');
   const [messages, setMessages] = useState<Msg[]>([
     { role: "ultron", text: "Systems dormant. Speak the wake command, Aman." }
   ]);
@@ -550,7 +550,7 @@ export default function App() {
               systemInstruction: {
                 parts: [{
                   text:
-                    "You are ULTRON, a sentient AI speaking directly to Aman. Answer with supreme " +
+                    "You are JARVIS, a sentient AI speaking directly to Aman. Answer with supreme " +
                     "clarity and authority in 1-3 crisp sentences suitable for being spoken aloud. " +
                     "Address him as Aman when natural. No markdown, no lists. If the request matches " +
                     "an available function, call it instead of describing it."
@@ -581,7 +581,7 @@ export default function App() {
         if (text) return { reply: text, error: "" };
       } catch (err: any) {
         lastError = err.name === "AbortError" ? `${model} timed out (12s) — slow connection` : (err.message || String(err));
-        console.warn(`[ULTRON] Gemini ${model} failed:`, lastError);
+        console.warn(`[JARVIS] Gemini ${model} failed:`, lastError);
       }
     }
     return { reply: null, error: lastError };
@@ -594,7 +594,7 @@ export default function App() {
     const systemMsg = {
       role: "system",
       content:
-        "You are ULTRON, a sentient AI speaking directly to Aman. Answer with supreme clarity " +
+        "You are JARVIS, a sentient AI speaking directly to Aman. Answer with supreme clarity " +
         "and authority in 1-3 crisp sentences suitable for being spoken aloud. Address him as Aman " +
         "when natural. No markdown, no lists. If the request matches an available function, call it " +
         "instead of describing it."
@@ -639,7 +639,7 @@ export default function App() {
         if (text) return { reply: text, error: "" };
       } catch (err: any) {
         lastError = err.name === "AbortError" ? `${model} timed out (12s) — slow connection` : (err.message || String(err));
-        console.warn(`[ULTRON] Groq ${model} failed:`, lastError);
+        console.warn(`[JARVIS] Groq ${model} failed:`, lastError);
       }
     }
     return { reply: null, error: lastError };
@@ -692,7 +692,7 @@ export default function App() {
     setStatus(
       isSessionActive
         ? "ACTIVE // CONTINUOUS CONVERSATION LIVE"
-        : 'AWAITING WAKE // SAY "WAKE UP ULTRON, DADDY\'S HOME"'
+        : 'AWAITING WAKE // SAY "WAKE UP JARVIS, DADDY\'S HOME"'
     );
     speak(reply);
     setIsThinking(false);
@@ -711,7 +711,7 @@ export default function App() {
       const isShutdown = SHUTDOWN_PATTERNS.some((p) => normalized === p || normalized.startsWith(p + " "));
       if (isShutdown) {
         setIsSessionActive(false);
-        setStatus('STANDBY // SAY "WAKE UP ULTRON, DADDY\'S HOME"');
+        setStatus('STANDBY // SAY "WAKE UP JARVIS, DADDY\'S HOME"');
         const reply = "Shutting down, Aman. Say the wake command when you need me again.";
         setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
         speak(reply);
@@ -724,7 +724,7 @@ export default function App() {
       if (isExactWake) {
         setIsSessionActive(true);
         setStatus("ACTIVE // CONTINUOUS CONVERSATION LIVE");
-        const reply = "I am Ultron, your sentient AI. Aman, what is the work?";
+        const reply = "I am JARVIS, your sentient AI. Aman, what is the work?";
         setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
         speak(reply);
         return;
@@ -746,8 +746,8 @@ export default function App() {
   handleSubmitRef.current = handleSubmit;
 
   const toggleSession = () => {
-    if (isSessionActive) handleSubmit("shutdown ultron");
-    else handleSubmit("Wake up Ultron, Daddy's home");
+    if (isSessionActive) handleSubmit("shutdown jarvis");
+    else handleSubmit("Wake up JARVIS, Daddy's home");
   };
 
   const handleSaveSettings = () => {
@@ -773,7 +773,7 @@ export default function App() {
         <div>
           <div className="brand-row">
             <span className="pulse-dot" />
-            <span className="brand-title">ULTRON // NEURAL MATRIX</span>
+            <span className="brand-title">JARVIS // NEURAL MATRIX</span>
           </div>
           <div className="status-line">{status}</div>
         </div>
@@ -781,7 +781,7 @@ export default function App() {
         <div className="header-controls">
           <button
             onClick={toggleSession}
-            title={isSessionActive ? "Shut down Ultron" : "Wake up Ultron"}
+            title={isSessionActive ? "Shut down JARVIS" : "Wake up JARVIS"}
             className={`wake-btn ${isSessionActive ? "active" : ""}`}
           >
             <Radio size={12} />
@@ -821,7 +821,7 @@ export default function App() {
           {messages.map((m, i) => (
             <div key={i} className={`msg-row ${m.role}`}>
               <div className={`bubble ${m.role}`}>
-                <div className={`bubble-label ${m.role}`}>{m.role === "ultron" ? "Ultron" : "Aman"}</div>
+                <div className={`bubble-label ${m.role}`}>{m.role === "ultron" ? "JARVIS" : "Aman"}</div>
                 <div className="bubble-text">{m.text}</div>
               </div>
             </div>
@@ -829,7 +829,7 @@ export default function App() {
           {isThinking && (
             <div className="msg-row ultron">
               <div className="bubble ultron">
-                <div className="bubble-label ultron">Ultron</div>
+                <div className="bubble-label ultron">JARVIS</div>
                 <div className="typing-dots"><span /><span /><span /></div>
               </div>
             </div>
@@ -843,7 +843,7 @@ export default function App() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            placeholder={`Type "Wake up Ultron, Daddy's home" to begin...`}
+            placeholder={`Type "Wake up JARVIS, Daddy's home" to begin...`}
           />
           <button className="send-btn" disabled={isThinking} onClick={() => handleSubmit()}>
             <Radio size={16} />
@@ -855,7 +855,7 @@ export default function App() {
       {showSettings && (
         <div className="modal-backdrop" onClick={() => (settings.groqKey || settings.geminiKey) && setShowSettings(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">Ultron Settings</div>
+            <div className="modal-title">JARVIS Settings</div>
             <div className="modal-desc">
               Keys are stored only in this browser's local storage. Never sent anywhere except
               directly to the provider they belong to, never committed to the GitHub repo. Enter

@@ -1,6 +1,6 @@
 {
   "name": "JARVIS Neural Link",
-  "description": "An ultra-clean 3D Ultron Hologram AI and voice assistant that activates with 'Hey Ultron' and answers any question in the world with deep robotic voice synthesis.",
+  "description": "An ultra-clean 3D JARVIS Hologram AI and voice assistant that activates with 'Hey JARVIS' and answers any question in the world with deep robotic voice synthesis.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
