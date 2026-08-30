@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { Mic, MicOff, Volume2, VolumeX, Radio, Settings, X } from "lucide-react";
 
 const WAKE_NORMALIZED = "wake up jarvis daddys home";
@@ -262,6 +265,18 @@ export default function App() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     mount.appendChild(renderer.domElement);
 
+    // Real bloom/glow — the reference image's brightness comes largely from
+    // this; flat unbloomed lines can't match it no matter how bright the color.
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(width, height),
+      1.1, // strength
+      0.6, // radius
+      0.15 // threshold — low, so even mid-brightness filaments catch some glow
+    );
+    composer.addPass(bloomPass);
+
     const FILAMENT_COLOR = 0xf0994d; // warm copper-amber, matches the reference
     const RING_COLOR = 0xc2761f; // slightly darker copper for the frame
 
@@ -299,9 +314,28 @@ export default function App() {
       const baseAngle = (i / MAIN_BRANCHES) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
       buildBranch(branchPoints, 0.32, 1.45 + Math.random() * 0.3, baseAngle, 0);
     }
+
+    // Color gradient by radius — bright cream near the center, deepening to
+    // copper-red at the edges, like embers cooling outward (the reference
+    // image is clearly not a flat single color; this is the biggest single
+    // improvement available without a full custom shader).
+    const CENTER_COLOR = new THREE.Color(0xfff2d6);
+    const EDGE_COLOR = new THREE.Color(0xb8481f);
+    const MAX_RADIUS = 1.9;
+    const filamentColors = new Float32Array(branchPoints.length * 3);
+    for (let i = 0; i < branchPoints.length; i++) {
+      const p = branchPoints[i];
+      const dist = Math.min(1, Math.sqrt(p.x * p.x + p.y * p.y) / MAX_RADIUS);
+      const c = CENTER_COLOR.clone().lerp(EDGE_COLOR, dist);
+      filamentColors[i * 3] = c.r;
+      filamentColors[i * 3 + 1] = c.g;
+      filamentColors[i * 3 + 2] = c.b;
+    }
+
     const filamentGeo = new THREE.BufferGeometry().setFromPoints(branchPoints);
+    filamentGeo.setAttribute("color", new THREE.BufferAttribute(filamentColors, 3));
     const filamentMat = new THREE.LineBasicMaterial({
-      color: FILAMENT_COLOR, transparent: true, opacity: 0.7,
+      vertexColors: true, transparent: true, opacity: 0.85,
       blending: THREE.AdditiveBlending, depthWrite: false
     });
     const filaments = new THREE.LineSegments(filamentGeo, filamentMat);
@@ -381,7 +415,9 @@ export default function App() {
       const shimmer = 0.75 + 0.25 * Math.sin(t * 3);
       const reactive = st.active ? st.intensity * 0.5 : 0;
       filamentMat.opacity = Math.min(1, 0.7 * shimmer + reactive);
-      filamentMat.color.setHex(st.unlocked ? 0xfbbf24 : FILAMENT_COLOR);
+      // Vertex colors carry the ember gradient now, so "reacting" is
+      // expressed as the glow itself intensifying rather than a color swap
+      bloomPass.strength = 1.1 + (st.unlocked ? 0.3 : 0) + reactive * 0.6;
 
       ring1.rotation.z = -t * 0.03;
       ring2.rotation.z = t * 0.04;
@@ -389,7 +425,7 @@ export default function App() {
       centerRing.rotation.z = t * 0.15;
       tickGroup.rotation.z = -t * 0.03;
 
-      renderer.render(scene, camera);
+      composer.render();
     }
     animate();
 
@@ -399,6 +435,7 @@ export default function App() {
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      composer.setSize(w, h);
     }
     window.addEventListener("resize", handleResize);
 
