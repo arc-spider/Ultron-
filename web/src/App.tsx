@@ -294,49 +294,69 @@ export default function App() {
     }
 
     const branchPoints: THREE.Vector3[] = [];
-    const MAIN_BRANCHES = 40;
+    const MAIN_BRANCHES = 70;
     for (let i = 0; i < MAIN_BRANCHES; i++) {
-      const baseAngle = (i / MAIN_BRANCHES) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
-      buildBranch(branchPoints, 0.28, 1.5 + Math.random() * 0.25, baseAngle, 0);
+      const baseAngle = (i / MAIN_BRANCHES) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      buildBranch(branchPoints, 0.32, 1.45 + Math.random() * 0.3, baseAngle, 0);
     }
     const filamentGeo = new THREE.BufferGeometry().setFromPoints(branchPoints);
     const filamentMat = new THREE.LineBasicMaterial({
-      color: FILAMENT_COLOR, transparent: true, opacity: 0.85,
+      color: FILAMENT_COLOR, transparent: true, opacity: 0.7,
       blending: THREE.AdditiveBlending, depthWrite: false
     });
     const filaments = new THREE.LineSegments(filamentGeo, filamentMat);
     holoGroup.add(filaments);
 
-    // --- Dark void at the very center ---
-    const voidGeo = new THREE.CircleGeometry(0.22, 32);
+    // --- Dark void at the very center, ringed by a thin bright collar ---
+    const voidGeo = new THREE.CircleGeometry(0.2, 32);
     const voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const voidCircle = new THREE.Mesh(voidGeo, voidMat);
-    voidCircle.position.z = 0.02;
+    voidCircle.position.z = 0.03;
     holoGroup.add(voidCircle);
 
-    // --- Two offset thick outer rings (the frame) ---
-    const ring1Geo = new THREE.TorusGeometry(1.75, 0.05, 8, 100);
+    const centerRingGeo = new THREE.TorusGeometry(0.22, 0.012, 6, 48);
+    const centerRingMat = new THREE.MeshBasicMaterial({
+      color: 0xffd699, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const centerRing = new THREE.Mesh(centerRingGeo, centerRingMat);
+    centerRing.position.z = 0.025;
+    holoGroup.add(centerRing);
+
+    // --- Outer ring frame: two close thick rings + one thin tilted ring
+    // wrapping around at an angle (the "Saturn ring" element in the reference) ---
+    const ring1Geo = new THREE.TorusGeometry(1.7, 0.055, 8, 100);
     const ring1Mat = new THREE.MeshBasicMaterial({ color: RING_COLOR, transparent: true, opacity: 0.85 });
     const ring1 = new THREE.Mesh(ring1Geo, ring1Mat);
     holoGroup.add(ring1);
 
-    const ring2Geo = new THREE.TorusGeometry(1.85, 0.035, 8, 100);
+    const ring2Geo = new THREE.TorusGeometry(1.78, 0.035, 8, 100);
     const ring2Mat = new THREE.MeshBasicMaterial({ color: RING_COLOR, transparent: true, opacity: 0.55 });
     const ring2 = new THREE.Mesh(ring2Geo, ring2Mat);
-    ring2.rotation.x = 0.25;
-    ring2.rotation.y = 0.1;
-    ring2.position.x = -0.06;
+    ring2.rotation.x = 0.2;
+    ring2.rotation.y = 0.08;
+    ring2.position.x = -0.05;
     holoGroup.add(ring2);
+
+    const ring3Geo = new THREE.TorusGeometry(1.95, 0.012, 6, 100);
+    const ring3Mat = new THREE.MeshBasicMaterial({
+      color: RING_COLOR, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const ring3 = new THREE.Mesh(ring3Geo, ring3Mat);
+    ring3.rotation.x = 1.15; // steep tilt so it reads edge-on, wrapping at an angle
+    ring3.rotation.z = 0.3;
+    holoGroup.add(ring3);
 
     // Segmented tick marks around the main ring — the dashed/mechanical
     // texture visible in the reference image
     const tickGroup = new THREE.Group();
-    const TICK_COUNT = 48;
+    const TICK_COUNT = 64;
     for (let i = 0; i < TICK_COUNT; i++) {
       if (Math.random() < 0.25) continue; // gaps, so it reads as broken/segmented, not solid
       const a = (i / TICK_COUNT) * Math.PI * 2;
-      const tickGeo = new THREE.BoxGeometry(0.04, 0.09, 0.02);
-      const tickMat = new THREE.MeshBasicMaterial({ color: FILAMENT_COLOR, transparent: true, opacity: 0.7 });
+      const tickGeo = new THREE.BoxGeometry(0.035, 0.1, 0.02);
+      const tickMat = new THREE.MeshBasicMaterial({ color: 0xffd699, transparent: true, opacity: 0.8 });
       const tick = new THREE.Mesh(tickGeo, tickMat);
       tick.position.set(Math.cos(a) * 1.75, Math.sin(a) * 1.75, 0);
       tick.rotation.z = a;
@@ -365,6 +385,8 @@ export default function App() {
 
       ring1.rotation.z = -t * 0.03;
       ring2.rotation.z = t * 0.04;
+      ring3.rotation.y = t * 0.05;
+      centerRing.rotation.z = t * 0.15;
       tickGroup.rotation.z = -t * 0.03;
 
       renderer.render(scene, camera);
@@ -388,10 +410,14 @@ export default function App() {
       filamentMat.dispose();
       voidGeo.dispose();
       voidMat.dispose();
+      centerRingGeo.dispose();
+      centerRingMat.dispose();
       ring1Geo.dispose();
       ring1Mat.dispose();
       ring2Geo.dispose();
       ring2Mat.dispose();
+      ring3Geo.dispose();
+      ring3Mat.dispose();
       tickGroup.children.forEach((c) => {
         (c as THREE.Mesh).geometry.dispose();
         ((c as THREE.Mesh).material as THREE.Material).dispose();
