@@ -3,14 +3,19 @@ import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { Mic, MicOff, Volume2, VolumeX, Radio, Settings, X } from "lucide-react";
+import { Mic, MicOff, Volume2, VolumeX, Radio } from "lucide-react";
 
-const WAKE_NORMALIZED = "wake up jarvis daddys home";
+// Hardcoded by explicit choice — no Settings screen, no localStorage.
+// This key is visible to anyone who views this page's source. Accepted
+// trade-off; rotate this key if that's ever a problem.
+const GROQ_API_KEY = "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";
+const DEFAULT_CITY = "Kanpur";
+
+const WAKE_NORMALIZED = "wake up jarvis";
 const SHUTDOWN_PATTERNS = [
   "shutdown jarvis", "shut down jarvis", "power down jarvis",
   "shut off jarvis", "turn off jarvis"
 ];
-const STORAGE_KEY = "ultron_settings_v1";
 
 function normalize(s: string): string {
   return s
@@ -19,25 +24,6 @@ function normalize(s: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function loadSettings() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const defaults = { groqKey: "", geminiKey: "", defaultCity: "Kanpur" };
-    if (!raw) return defaults;
-    return { ...defaults, ...JSON.parse(raw) };
-  } catch {
-    return { groqKey: "", geminiKey: "", defaultCity: "Kanpur" };
-  }
-}
-
-function saveSettings(settings: { groqKey: string; geminiKey: string; defaultCity: string }) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch {
-    // localStorage unavailable (private browsing etc) — settings just won't persist
-  }
 }
 
 // ---------- Direct client-side tool implementations (no server needed) ----------
@@ -204,29 +190,14 @@ const TOOL_DECLARATIONS = [
   }
 ];
 
-// Same 4 tools, reshaped for Gemini's functionDeclarations format
-// (Gemini doesn't use the OpenAI type:"function" wrapper).
-const GEMINI_FUNCTION_DECLARATIONS = TOOL_DECLARATIONS.map((t) => ({
-  name: t.function.name,
-  description: t.function.description,
-  parameters: t.function.parameters
-}));
-
 type Msg = { role: "aman" | "ultron"; text: string };
 
 export default function App() {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneStateRef = useRef({ intensity: 0, active: false, unlocked: false });
 
-  const [settings, setSettings] = useState(loadSettings());
-  const [showSettings, setShowSettings] = useState(!loadSettings().groqKey && !loadSettings().geminiKey);
-  const [draftKey, setDraftKey] = useState(settings.groqKey);
-  const [draftGeminiKey, setDraftGeminiKey] = useState(settings.geminiKey);
-  const [draftCity, setDraftCity] = useState(settings.defaultCity);
-  const [justSaved, setJustSaved] = useState(false);
-
   const [isSessionActive, setIsSessionActive] = useState(false);
-  const [status, setStatus] = useState('AWAITING WAKE // SAY "WAKE UP JARVIS, DADDY\'S HOME"');
+  const [status, setStatus] = useState('AWAITING WAKE // SAY "WAKE UP JARVIS"');
   const [messages, setMessages] = useState<Msg[]>([
     { role: "ultron", text: "Systems dormant. Speak the wake command, Aman." }
   ]);
@@ -243,8 +214,6 @@ export default function App() {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const isMutedRef = useRef(false);
   isMutedRef.current = isMuted;
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
 
   // ---------- THREE.JS HOLOGRAM ----------
   // ---------- HOLOGRAM: fractal lightning-branch burst inside a segmented
@@ -519,7 +488,10 @@ export default function App() {
     }
   }, [messages, isThinking]);
 
-  // ---------- SPEECH INPUT — real mic, real browser, no sandbox restriction ----------
+  // ---------- SPEECH INPUT — always-on continuous listening, real mic ----------
+  const micOnRef = useRef(false);
+  const isSpeakingRef = useRef(false);
+
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
@@ -528,21 +500,37 @@ export default function App() {
     }
     try {
       const rec = new SR();
-      rec.continuous = false;
+      rec.continuous = true;
       rec.interimResults = false;
       rec.lang = "en-US";
       rec.onresult = (e: any) => {
-        const transcript = e.results[0][0].transcript;
+        const last = e.results[e.results.length - 1];
+        if (!last.isFinal) return;
+        const transcript = last[0].transcript;
         setInput(transcript);
         handleSubmitRef.current(transcript);
       };
-      rec.onend = () => setIsListening(false);
+      rec.onend = () => {
+        // Auto-restart to stay "always on" — unless the user turned the mic
+        // off, or JARVIS is mid-speech (paused deliberately, see the effect
+        // below, so it doesn't hear and react to its own voice).
+        if (micOnRef.current && !isSpeakingRef.current) {
+          setTimeout(() => {
+            if (micOnRef.current && !isSpeakingRef.current) {
+              try { rec.start(); } catch { /* already running — fine */ }
+            }
+          }, 250);
+        }
+      };
       rec.onerror = (e: any) => {
-        setIsListening(false);
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          micOnRef.current = false;
+          setIsListening(false);
           setMicError("Microphone permission was denied. Check your browser's site settings and allow microphone access for this page.");
-        } else if (e.error === "no-speech") {
-          setMicError("Didn't catch that — tap the mic and try again.");
+        } else if (e.error === "no-speech" || e.error === "aborted") {
+          // Expected constantly in always-on mode (silence, or our own
+          // deliberate stop/restart cycling) — onend's restart handles it,
+          // no need to alarm the user over normal silence.
         } else {
           setMicError(`Mic error: ${e.error}.`);
         }
@@ -554,13 +542,33 @@ export default function App() {
     }
   }, []);
 
+  // Pause listening while JARVIS is speaking, resume the moment it stops —
+  // without this, the mic would pick up JARVIS's own voice and try to
+  // respond to itself.
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+    const rec = recognitionRef.current;
+    if (!rec || !micOnRef.current) return;
+
+    if (isSpeaking) {
+      try { rec.stop(); } catch { /* not running — fine */ }
+    } else {
+      setTimeout(() => {
+        if (micOnRef.current && !isSpeakingRef.current) {
+          try { rec.start(); } catch { /* already running — fine */ }
+        }
+      }, 300);
+    }
+  }, [isSpeaking]);
+
   const toggleMicListening = async () => {
     const rec = recognitionRef.current;
     if (!rec) return;
 
     if (isListening) {
-      rec.stop();
+      micOnRef.current = false;
       setIsListening(false);
+      try { rec.stop(); } catch {}
       return;
     }
 
@@ -576,6 +584,7 @@ export default function App() {
     }
 
     try {
+      micOnRef.current = true;
       rec.start();
       setIsListening(true);
     } catch {
@@ -588,7 +597,7 @@ export default function App() {
 
   const runTool = async (name: string, args: any): Promise<string> => {
     if (name === "get_weather") {
-      const location = args?.location || settingsRef.current.defaultCity;
+      const location = args?.location || DEFAULT_CITY;
       return (await getWeather(location)) || `Couldn't reach the weather service, Aman.`;
     }
     if (name === "convert_currency") {
@@ -604,66 +613,6 @@ export default function App() {
       return (await getEarthquakeAlerts()) || "Couldn't reach the earthquake feed, Aman.";
     }
     return "That function isn't wired up.";
-  };
-
-  const callGeminiOnce = async (
-    userText: string,
-    geminiKey: string
-  ): Promise<{ reply: string | null; error: string }> => {
-    const MODEL_CASCADE = ["gemini-flash-latest", "gemini-3.6-flash"];
-    const geminiHistory = historyRef.current.map((h) => ({
-      role: h.role === "assistant" ? "model" : "user",
-      parts: [{ text: h.content }]
-    }));
-
-    let lastError = "";
-    for (const model of MODEL_CASCADE) {
-      try {
-        const res = await fetchWithTimeout(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [...geminiHistory, { role: "user", parts: [{ text: userText }] }],
-              systemInstruction: {
-                parts: [{
-                  text:
-                    "You are JARVIS, a sentient AI speaking directly to Aman. Answer with supreme " +
-                    "clarity and authority in 1-3 crisp sentences suitable for being spoken aloud. " +
-                    "Address him as Aman when natural. No markdown, no lists. If the request matches " +
-                    "an available function, call it instead of describing it."
-                }]
-              },
-              tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
-              toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-              generationConfig: { maxOutputTokens: 300, temperature: 0.4 }
-            })
-          }
-        );
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Gemini ${res.status}: ${errText.slice(0, 200)}`);
-        }
-
-        const data = await res.json();
-        const parts = data.candidates?.[0]?.content?.parts || [];
-        const functionCallPart = parts.find((p: any) => p.functionCall);
-
-        if (functionCallPart) {
-          const reply = await runTool(functionCallPart.functionCall.name, functionCallPart.functionCall.args || {});
-          return { reply, error: "" };
-        }
-
-        const text = parts.map((p: any) => p.text || "").join(" ").trim();
-        if (text) return { reply: text, error: "" };
-      } catch (err: any) {
-        lastError = err.name === "AbortError" ? `${model} timed out (12s) — slow connection` : (err.message || String(err));
-        console.warn(`[JARVIS] Gemini ${model} failed:`, lastError);
-      }
-    }
-    return { reply: null, error: lastError };
   };
 
   const callGroqOnce = async (
@@ -725,36 +674,14 @@ export default function App() {
   };
 
   const callBrain = useCallback(async (userText: string) => {
-    const { groqKey, geminiKey } = settingsRef.current;
-    if (!groqKey && !geminiKey) {
-      setShowSettings(true);
-      const reply = "I need a Groq or Gemini API key first, Aman. Open settings to add one.";
-      setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
-      speak(reply);
-      return;
-    }
-
     setIsThinking(true);
     setStatus("PROCESSING...");
 
-    // Gemini tried first when both are set — it's the higher-quality brain;
-    // Groq is the fast fallback if Gemini's cascade fails entirely.
-    let reply: string | null = null;
-    let lastError = "";
-
-    if (geminiKey) {
-      const result = await callGeminiOnce(userText, geminiKey);
-      reply = result.reply;
-      lastError = result.error;
-    }
-    if (!reply && groqKey) {
-      const result = await callGroqOnce(userText, groqKey);
-      reply = result.reply;
-      lastError = result.error || lastError;
-    }
+    const result = await callGroqOnce(userText, GROQ_API_KEY);
+    let reply = result.reply;
 
     if (!reply) {
-      reply = `Couldn't reach the brain just now, Aman — ${lastError || "check your API keys in settings"}.`;
+      reply = `Couldn't reach the brain just now, Aman — ${result.error || "unknown error"}.`;
       setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply as string }]);
       speak(reply);
       setIsThinking(false);
@@ -771,7 +698,7 @@ export default function App() {
     setStatus(
       isSessionActive
         ? "ACTIVE // CONTINUOUS CONVERSATION LIVE"
-        : 'AWAITING WAKE // SAY "WAKE UP JARVIS, DADDY\'S HOME"'
+        : 'AWAITING WAKE // SAY "WAKE UP JARVIS"'
     );
     speak(reply);
     setIsThinking(false);
@@ -790,7 +717,7 @@ export default function App() {
       const isShutdown = SHUTDOWN_PATTERNS.some((p) => normalized === p || normalized.startsWith(p + " "));
       if (isShutdown) {
         setIsSessionActive(false);
-        setStatus('STANDBY // SAY "WAKE UP JARVIS, DADDY\'S HOME"');
+        setStatus('STANDBY // SAY "WAKE UP JARVIS"');
         const reply = "Shutting down, Aman. Say the wake command when you need me again.";
         setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
         speak(reply);
@@ -812,7 +739,7 @@ export default function App() {
       if (startsWithWake) {
         setIsSessionActive(true);
         setStatus("ACTIVE // CONTINUOUS CONVERSATION LIVE");
-        const rest = text.slice(text.toLowerCase().indexOf("home") + 4).replace(/^[\s,.:]+/, "").trim();
+        const rest = text.slice(text.toLowerCase().indexOf("jarvis") + 6).replace(/^[\s,.:]+/, "").trim();
         if (rest) callBrain(rest);
         return;
       }
@@ -826,22 +753,7 @@ export default function App() {
 
   const toggleSession = () => {
     if (isSessionActive) handleSubmit("shutdown jarvis");
-    else handleSubmit("Wake up JARVIS, Daddy's home");
-  };
-
-  const handleSaveSettings = () => {
-    const next = {
-      groqKey: draftKey.trim(),
-      geminiKey: draftGeminiKey.trim(),
-      defaultCity: draftCity.trim() || "Kanpur"
-    };
-    setSettings(next);
-    saveSettings(next);
-    setJustSaved(true);
-    setTimeout(() => setJustSaved(false), 2000);
-    if (next.groqKey || next.geminiKey) {
-      setTimeout(() => setShowSettings(false), 600);
-    }
+    else handleSubmit("Wake up JARVIS");
   };
 
   return (
@@ -870,7 +782,7 @@ export default function App() {
           {micSupported && (
             <button
               onClick={toggleMicListening}
-              title={isListening ? "Listening..." : "Tap to speak"}
+              title={isListening ? "Mic always on — tap to turn off" : "Tap to turn mic always-on"}
               className={`icon-btn ${isListening ? "active" : ""}`}
             >
               {isListening ? <Mic size={15} /> : <MicOff size={15} />}
@@ -883,10 +795,6 @@ export default function App() {
             className="icon-btn"
           >
             {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-          </button>
-
-          <button onClick={() => setShowSettings(true)} title="Settings" className="icon-btn">
-            <Settings size={15} />
           </button>
         </div>
       </div>
@@ -922,75 +830,14 @@ export default function App() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            placeholder={`Type "Wake up JARVIS, Daddy's home" to begin...`}
+            placeholder={`Type "Wake up JARVIS" to begin...`}
           />
           <button className="send-btn" disabled={isThinking} onClick={() => handleSubmit()}>
             <Radio size={16} />
           </button>
         </div>
-        <div className="hint-text">Real voice input works here — tap the mic and allow permission</div>
+        <div className="hint-text">Tap the mic once to turn it always-on — then just talk, no need to tap again</div>
       </div>
-
-      {showSettings && (
-        <div className="modal-backdrop" onClick={() => (settings.groqKey || settings.geminiKey) && setShowSettings(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">JARVIS Settings</div>
-            <div className="modal-desc">
-              Keys are stored only in this browser's local storage. Never sent anywhere except
-              directly to the provider they belong to, never committed to the GitHub repo. Enter
-              once, saved on this device from then on. If both are set, Gemini answers first
-              (higher quality); Groq is the fast fallback if Gemini's cascade fails.
-            </div>
-
-            <div className="field-group">
-              <label className="field-label">Gemini API Key</label>
-              <input
-                type="password"
-                className="field-input"
-                value={draftGeminiKey}
-                onChange={(e) => setDraftGeminiKey(e.target.value)}
-                placeholder="AIzaSy... or AQ...."
-              />
-              <div className="field-hint">Get one free, no card, at aistudio.google.com/apikey</div>
-            </div>
-
-            <div className="field-group">
-              <label className="field-label">Groq API Key</label>
-              <input
-                type="password"
-                className="field-input"
-                value={draftKey}
-                onChange={(e) => setDraftKey(e.target.value)}
-                placeholder="gsk_..."
-              />
-              <div className="field-hint">Get one free at console.groq.com</div>
-            </div>
-
-            <div className="field-group">
-              <label className="field-label">Default City (for weather)</label>
-              <input
-                type="text"
-                className="field-input"
-                value={draftCity}
-                onChange={(e) => setDraftCity(e.target.value)}
-                placeholder="Kanpur"
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button className="btn-primary" onClick={handleSaveSettings}>
-                Save{justSaved ? "d" : ""}
-                {justSaved && <span className="saved-badge">✓</span>}
-              </button>
-              {(settings.groqKey || settings.geminiKey) && (
-                <button className="btn-secondary" onClick={() => setShowSettings(false)}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
