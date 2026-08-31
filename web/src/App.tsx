@@ -489,8 +489,16 @@ export default function App() {
   }, [messages, isThinking]);
 
   // ---------- SPEECH INPUT — always-on continuous listening, real mic ----------
+  // Design: the recognizer is never deliberately stopped/restarted around
+  // JARVIS's speech (that stop/start cycling is what caused it to drop out
+  // and not resume — mobile browsers handle rapid SpeechRecognition
+  // start/stop unreliably). Instead it just keeps running continuously, and
+  // any transcript captured while JARVIS is mid-speech is discarded — so it
+  // can't hear and react to its own voice, without ever touching the mic's
+  // running state at all.
   const micOnRef = useRef(false);
   const isSpeakingRef = useRef(false);
+  isSpeakingRef.current = isSpeaking;
 
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -506,17 +514,19 @@ export default function App() {
       rec.onresult = (e: any) => {
         const last = e.results[e.results.length - 1];
         if (!last.isFinal) return;
+        if (isSpeakingRef.current) return; // JARVIS is talking — ignore, likely its own voice
         const transcript = last[0].transcript;
         setInput(transcript);
         handleSubmitRef.current(transcript);
       };
       rec.onend = () => {
-        // Auto-restart to stay "always on" — unless the user turned the mic
-        // off, or JARVIS is mid-speech (paused deliberately, see the effect
-        // below, so it doesn't hear and react to its own voice).
-        if (micOnRef.current && !isSpeakingRef.current) {
+        // Always restart to stay "always on" as long as the user hasn't
+        // explicitly turned the mic off. No longer gated on isSpeaking —
+        // that gate was the bug: it meant a restart got skipped and the
+        // mic just stayed off with nothing to ever turn it back on.
+        if (micOnRef.current) {
           setTimeout(() => {
-            if (micOnRef.current && !isSpeakingRef.current) {
+            if (micOnRef.current) {
               try { rec.start(); } catch { /* already running — fine */ }
             }
           }, 250);
@@ -528,9 +538,9 @@ export default function App() {
           setIsListening(false);
           setMicError("Microphone permission was denied. Check your browser's site settings and allow microphone access for this page.");
         } else if (e.error === "no-speech" || e.error === "aborted") {
-          // Expected constantly in always-on mode (silence, or our own
-          // deliberate stop/restart cycling) — onend's restart handles it,
-          // no need to alarm the user over normal silence.
+          // Expected constantly in always-on mode (silence between
+          // sentences) — onend's restart handles it, no need to alarm
+          // the user over normal silence.
         } else {
           setMicError(`Mic error: ${e.error}.`);
         }
@@ -541,25 +551,6 @@ export default function App() {
       setMicSupported(false);
     }
   }, []);
-
-  // Pause listening while JARVIS is speaking, resume the moment it stops —
-  // without this, the mic would pick up JARVIS's own voice and try to
-  // respond to itself.
-  useEffect(() => {
-    isSpeakingRef.current = isSpeaking;
-    const rec = recognitionRef.current;
-    if (!rec || !micOnRef.current) return;
-
-    if (isSpeaking) {
-      try { rec.stop(); } catch { /* not running — fine */ }
-    } else {
-      setTimeout(() => {
-        if (micOnRef.current && !isSpeakingRef.current) {
-          try { rec.start(); } catch { /* already running — fine */ }
-        }
-      }, 300);
-    }
-  }, [isSpeaking]);
 
   const toggleMicListening = async () => {
     const rec = recognitionRef.current;
