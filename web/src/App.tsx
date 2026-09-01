@@ -16,6 +16,10 @@ const SHUTDOWN_PATTERNS = [
   "shutdown jarvis", "shut down jarvis", "power down jarvis",
   "shut off jarvis", "turn off jarvis"
 ];
+const MIC_OFF_PATTERNS = [
+  "jarvis mic off", "jarvis turn off the mic", "jarvis turn off mic",
+  "mic off jarvis", "turn off the mic", "turn off mic", "stop listening"
+];
 
 function normalize(s: string): string {
   return s
@@ -529,7 +533,7 @@ export default function App() {
             if (micOnRef.current) {
               try { rec.start(); } catch { /* already running — fine */ }
             }
-          }, 250);
+          }, 100);
         }
       };
       rec.onerror = (e: any) => {
@@ -704,6 +708,17 @@ export default function App() {
       setInput("");
 
       const normalized = normalize(text);
+
+      const isMicOff = MIC_OFF_PATTERNS.some((p) => normalized === p || normalized.startsWith(p + " "));
+      if (isMicOff) {
+        micOnRef.current = false;
+        setIsListening(false);
+        try { recognitionRef.current?.stop(); } catch {}
+        const reply = "Mic off, Aman. Tap it or say the wake command to bring me back.";
+        setMessages((prev) => [...prev.slice(-40), { role: "ultron", text: reply }]);
+        speak(reply);
+        return;
+      }
 
       const isShutdown = SHUTDOWN_PATTERNS.some((p) => normalized === p || normalized.startsWith(p + " "));
       if (isShutdown) {
